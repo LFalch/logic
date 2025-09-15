@@ -2,6 +2,7 @@ use std::{collections::{HashMap, HashSet}, fmt::{self, Display}, ops::{BitAnd, B
 
 mod symtab;
 pub mod lk_calc;
+pub mod first_order;
 
 use self::symtab::Interpretation;
 
