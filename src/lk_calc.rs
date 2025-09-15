@@ -57,7 +57,7 @@ pub fn is_valid(f: &Formula) -> bool {
 #[inline]
 pub fn tree(wrt: &mut impl LkWriter, f: &Formula) {
     // we ignore this return value because all it means is if it's false, it returned early
-    inner_is_valid(wrt, Vec::new(), vec![f]);
+    tree_inner(wrt, Vec::new(), vec![f]);
 }
 
 fn reduce_opt<T: Copy>(a: Option<T>, b: T, f: impl FnOnce(T, T) -> bool) -> Option<T> {
@@ -71,7 +71,7 @@ fn is_worse_right_pair<T, U>((_, r1): (T, RuleKind), (_, r2): (U, RuleKind)) -> 
     r1.is_worse_right(r2)
 }
 
-fn inner_is_valid<'a>(wrt: &mut impl LkWriter, mut antecedent: Vec<&'a Formula>, mut succedent: Vec<&'a Formula>) -> bool {
+fn tree_inner<'a>(wrt: &mut impl LkWriter, mut antecedent: Vec<&'a Formula>, mut succedent: Vec<&'a Formula>) -> bool {
     loop {
         wrt.write_derivation(antecedent.iter().copied(), succedent.iter().copied());
         if antecedent.iter().any(|a| succedent.contains(a)) {
@@ -135,7 +135,7 @@ fn inner_is_valid<'a>(wrt: &mut impl LkWriter, mut antecedent: Vec<&'a Formula>,
                 Formula::Conjunction(f, f1) => antecedent.extend([&**f, f1]),
                 Formula::Disjunction(f, f1) => {
                     wrt.start_branch();
-                    if !inner_is_valid(wrt, add_one(&antecedent, f), succedent.clone()) {
+                    if !tree_inner(wrt, add_one(&antecedent, f), succedent.clone()) {
                         wrt.end_branch();
                         break false;
                     }
@@ -144,14 +144,34 @@ fn inner_is_valid<'a>(wrt: &mut impl LkWriter, mut antecedent: Vec<&'a Formula>,
                 }
                 Formula::Implication(f, f1) => {
                     wrt.start_branch();
-                    if !inner_is_valid(wrt, add_one(&antecedent, f1), succedent.clone()) {
+                    if !tree_inner(wrt, add_one(&antecedent, f1), succedent.clone()) {
                         wrt.end_branch();
                         break false;
                     }
                     wrt.end_branch();
                     succedent.push(f);
                 }
-                Formula::Equivalance(f, f1) => todo!("{} {}", f, f1),
+                Formula::Equivalance(f, f1) => {
+                    wrt.start_branch();
+                    if !tree_inner(wrt, add_one(&antecedent, f1), succedent.clone()) {
+                        wrt.end_branch();
+                        break false;
+                    }
+                    wrt.end_branch();
+                    wrt.start_branch();
+                    if !tree_inner(wrt, add_one(&antecedent, f), succedent.clone()) {
+                        wrt.end_branch();
+                        break false;
+                    }
+                    wrt.end_branch();
+                    wrt.start_branch(); 
+                    if !tree_inner(wrt, antecedent.clone(), add_one(&antecedent, f)) {
+                        wrt.end_branch();
+                        break false;
+                    }
+                    wrt.end_branch();
+                    succedent.push(f1);
+                }
                 Formula::Atom(_) => unreachable!(),
             }
         } else {
@@ -164,14 +184,23 @@ fn inner_is_valid<'a>(wrt: &mut impl LkWriter, mut antecedent: Vec<&'a Formula>,
                 }
                 Formula::Conjunction(f, f1) => {
                     wrt.start_branch();
-                    if !inner_is_valid(wrt, antecedent.clone(), add_one(&succedent, f)) {
+                    if !tree_inner(wrt, antecedent.clone(), add_one(&succedent, f)) {
                         wrt.end_branch();
                         break false;
                     }
                     wrt.end_branch();
                     succedent.push(f1);
                 }
-                Formula::Equivalance(f, f1) => todo!("{} {}", f, f1),
+                Formula::Equivalance(f, f1) => {
+                    wrt.start_branch();
+                    if !tree_inner(wrt, add_one(&antecedent, f1), add_one(&succedent, f)) {
+                        wrt.end_branch();
+                        break false;
+                    }
+                    wrt.end_branch();
+                    succedent.push(f1);
+                    antecedent.push(f);
+                }
                 Formula::Atom(_) => unreachable!(),
             }
         }
