@@ -3,6 +3,7 @@ use std::{collections::{HashMap, HashSet}, fmt::{self, Display}, ops::{BitAnd, B
 mod symtab;
 pub mod lk_calc;
 pub mod first_order;
+pub mod parse;
 
 use self::symtab::Interpretation;
 
@@ -143,9 +144,9 @@ impl Display for Formula {
 
         match self {
             Formula::Atom(c) => write!(f, "{c}"),
-            Formula::Conjunction(f1, f2) => write!(f, "{f1:.prec$} ∧ {f2:.prec$}"),
-            Formula::Disjunction(f1, f2) => write!(f, "{f1:.prec$} ∨ {f2:.prec$}"),
             Formula::Not(f1) => write!(f, "¬{f1:.prec$}"),
+            Formula::Disjunction(f1, f2) => write!(f, "{f1:.prec$} ∨ {f2:.prec$}"),
+            Formula::Conjunction(f1, f2) => write!(f, "{f1:.prec$} ∧ {f2:.prec$}"),
             Formula::Implication(f1, f2) => write!(f, "{f1:.prec$} → {f2:.prec$}"),
             Formula::Equivalance(f1, f2) => write!(f, "{f1:.prec$} ↔ {f2:.prec$}"),
         }?;
