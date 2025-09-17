@@ -17,6 +17,16 @@ pub enum Formula {
     Equivalance(Box<Formula>, Box<Formula>),
 }
 impl Formula {
+    const fn precedence(&self) -> u8 {
+        match self {
+            Formula::Atom(_) => 255,
+            Formula::Not(_) => 16,
+            Formula::Conjunction(_, _) => 14,
+            Formula::Disjunction(_, _) => 12,
+            Formula::Implication(_, _) => 10,
+            Formula::Equivalance(_, _) => 8,
+        }
+    }
     #[inline]
     pub fn and(self, b: Self) -> Self {
         Self::Conjunction(Box::new(self), Box::new(b))
@@ -123,14 +133,26 @@ impl BitOr for Formula {
 
 impl Display for Formula {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let upper_precedence = f.precision().unwrap_or(0);
+        let prec = self.precedence() as usize;
+
+        let parentheses = upper_precedence >= prec;
+        if parentheses {
+            write!(f, "(")?;
+        }
+
         match self {
             Formula::Atom(c) => write!(f, "{c}"),
-            Formula::Conjunction(f1, f2) => write!(f, "({f1} & {f2})"),
-            Formula::Disjunction(f1, f2) => write!(f, "({f1} | {f2})"),
-            Formula::Not(f1) => write!(f, "(~{f1})"),
-            Formula::Implication(f1, f2) => write!(f, "({f1} -> {f2})"),
-            Formula::Equivalance(f1, f2) => write!(f, "({f1} <-> {f2})"),
+            Formula::Conjunction(f1, f2) => write!(f, "{f1:.prec$} ∧ {f2:.prec$}"),
+            Formula::Disjunction(f1, f2) => write!(f, "{f1:.prec$} ∨ {f2:.prec$}"),
+            Formula::Not(f1) => write!(f, "¬{f1:.prec$}"),
+            Formula::Implication(f1, f2) => write!(f, "{f1:.prec$} → {f2:.prec$}"),
+            Formula::Equivalance(f1, f2) => write!(f, "{f1:.prec$} ↔ {f2:.prec$}"),
+        }?;
+        if parentheses {
+            write!(f, ")")?;
         }
+        Ok(())
     }
 }
 

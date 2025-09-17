@@ -86,6 +86,18 @@ impl Formula {
             Formula::Equivalance(formula, formula1) => union(formula.inner_gfs(), formula1.inner_gfs()),
         }
     }
+    const fn precedence(&self) -> u8 {
+        match self {
+            Formula::Predicate(_, _) => 255,
+            Formula::ThereExists(_, _) => 20,
+            Formula::ForAll(_, _) => 18,
+            Formula::Not(_) => 16,
+            Formula::Conjunction(_, _) => 14,
+            Formula::Disjunction(_, _) => 12,
+            Formula::Implication(_, _) => 6,
+            Formula::Equivalance(_, _) => 4,
+        }
+    }
 }
 
 impl Formula {
@@ -128,6 +140,13 @@ impl Display for Term {
 }
 impl Display for Formula {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let uprec = f.precision().unwrap_or(0);
+        let prec = self.precedence() as usize;
+
+        let parentheses = uprec >= prec;
+        if parentheses {
+            write!(f, "(")?;
+        }
         match self {
             Formula::Predicate(c, terms) => {
                 write!(f, "{c}(")?;
@@ -141,13 +160,17 @@ impl Display for Formula {
                 }
                 write!(f, ")")
             }
-            Formula::ForAll(c, f1) => write!(f, "∀{c} {f1}"),
-            Formula::ThereExists(c, f1) => write!(f, "∃{c} {f1}"),
-            Formula::Conjunction(f1, f2) => write!(f, "({f1} ∧ {f2})"),
-            Formula::Disjunction(f1, f2) => write!(f, "({f1} ∨ {f2})"),
-            Formula::Not(f1) => write!(f, "(¬{f1})"),
-            Formula::Implication(f1, f2) => write!(f, "({f1} → {f2})"),
-            Formula::Equivalance(f1, f2) => write!(f, "({f1} ↔ {f2})"),
+            Formula::ForAll(c, f1) => write!(f, "∀{c}. {f1:.prec$}"),
+            Formula::ThereExists(c, f1) => write!(f, "∃{c}. {f1:.prec$}"),
+            Formula::Conjunction(f1, f2) => write!(f, "{f1:.prec$} ∧ {f2:.prec$}"),
+            Formula::Disjunction(f1, f2) => write!(f, "{f1:.prec$} ∨ {f2:.prec$}"),
+            Formula::Not(f1) => write!(f, "¬{f1:.prec$}"),
+            Formula::Implication(f1, f2) => write!(f, "{f1:.prec$} → {f2:.prec$}"),
+            Formula::Equivalance(f1, f2) => write!(f, "{f1:.prec$} ↔ {f2:.prec$}"),
+        }?;
+        if parentheses {
+            write!(f, ")")?;
         }
+        Ok(())
     }
 }
