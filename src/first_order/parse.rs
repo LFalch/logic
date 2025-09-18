@@ -1,6 +1,6 @@
 use nom::{
     branch::alt, bytes::complete::tag, character::{
-        anychar, complete::{char, space0, space1}
+        anychar, complete::{char, multispace0, multispace1}
     }, combinator::{eof, opt}, error::ParseError, multi::{fold, separated_list0}, sequence::{delimited, pair, preceded, terminated}, AsChar, IResult, Input, Parser
 };
 use std::{collections::HashSet, str::FromStr};
@@ -60,7 +60,7 @@ fn close_term(t: &mut Term, map: &HashSet<char>) {
 }
 
 fn parens(i: &str) -> IResult<&str, Formula> {
-    delimited(space0, delimited(tag("("), biimplication, tag(")")), space0).parse(i)
+    soft(delimited(tag("("), biimplication, tag(")"))).parse(i)
 }
 
 fn term(i: &str) -> IResult<&str, Term> {
@@ -95,21 +95,21 @@ fn predicate(i: &str) -> IResult<&str, Formula> {
     })
 }
 fn last(i: &str) -> IResult<&str, Formula> {
-    alt((parens, delimited(space0, predicate, space0))).parse(i)
+    alt((parens, soft(predicate))).parse(i)
 }
 fn pref(i: &str) -> IResult<&str, Formula> {
-    let (i, _) = space0(i)?;
+    let (i, _) = multispace0(i)?;
 
     let meow = alt((
         preceded(alt((char('~'), char('!'), char('¬'))), pref).map(|f| Formula::not(f)),
         pair(
             delimited(alt((tag("∀"), tag("forall"))), anychar, opt(char('.'))),
-            preceded(space1, pref),
+            preceded(multispace1, pref),
         )
         .map(|(c, f)| Formula::forall(c, f)),
         pair(
             delimited(alt((tag("∃"), tag("exists"))), anychar, opt(char('.'))),
-            preceded(space1, pref),
+            preceded(multispace1, pref),
         )
         .map(|(c, f)| Formula::exists(c, f)),
         last,
@@ -168,14 +168,14 @@ fn biimplication(i: &str) -> IResult<&str, Formula> {
 }
 #[inline]
 fn formula(i: &str) -> IResult<&str, Formula> {
-    terminated(biimplication, pair(space0, eof))
+    terminated(biimplication, (multispace0, eof))
         .parse(i)
 }
 
-fn soft<I: Input, O, E: ParseError<I>>(p: impl Parser<I, Output = O, Error = E>) -> impl Parser<I, Output = O, Error = E>
+pub(crate) fn soft<I: Input, O, E: ParseError<I>>(p: impl Parser<I, Output = O, Error = E>) -> impl Parser<I, Output = O, Error = E>
 where
     E: ParseError<I>,
     <I as Input>::Item: AsChar + Clone,
 {
-    delimited(space0, p, space0)
+    delimited(multispace0, p, multispace0)
 }

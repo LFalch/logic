@@ -43,9 +43,6 @@ fn line_loop(mut f: impl FnMut(&str)) -> Result<(), Box<dyn Error>> {
         if stdin().read_line(&mut s)? == 0 {
             break;
         }
-        if s.chars().last() == Some('\n') {
-            s.pop();
-        }
         if s.is_empty() {
             continue;
         }
