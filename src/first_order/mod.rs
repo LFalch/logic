@@ -79,7 +79,7 @@ impl Formula {
         Formula::Implication(Box::new(f), Box::new(f1))
     }
     pub fn iff(f: Formula, f1: Formula) -> Formula {
-        Formula::Implication(Box::new(f), Box::new(f1))
+        Formula::Equivalance(Box::new(f), Box::new(f1))
     }
     pub fn get_all_symbols(&self) -> impl IntoIterator<Item=char> {
         match self {
@@ -183,16 +183,16 @@ impl Display for Formula {
         }
         match self {
             Formula::Predicate(c, terms) => {
-                write!(f, "{c}(")?;
-                let mut comma = false;
-                for term in terms {
-                    if comma {
-                        write!(f, ", ")?;
+                write!(f, "{c}")?;
+                if let Some(first) = terms.get(0) {
+                    write!(f, "({first}")?;
+                    for term in terms {
+                        write!(f, ", {term}")?;
                     }
-                    write!(f, "{term}")?;
-                    comma = true;
+                    write!(f, ")")
+                } else {
+                    Ok(())
                 }
-                write!(f, ")")
             }
             Formula::ForAll(c, f1) => write!(f, "∀{c}. {f1:.prec$}"),
             Formula::ThereExists(c, f1) => write!(f, "∃{c}. {f1:.prec$}"),

@@ -156,7 +156,7 @@ fn implication(i: &str) -> IResult<&str, Formula> {
 
 fn biimplication(i: &str) -> IResult<&str, Formula> {
     let (i, init) = implication(i)?;
-    
+
     fold(
         0..,
         pair(alt((tag("<->"), tag("<=>"), tag("↔"))), implication),
