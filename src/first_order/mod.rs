@@ -141,11 +141,11 @@ impl Formula {
             Formula::Predicate(c, items) => {
                 return items.is_empty().then_some(Pf::Atom(*c))
             }
-            Formula::Conjunction(f, f2) => Pf::Conjunction(Box::new(f.try_to_propositional()?), Box::new(f2.try_to_propositional()?)),
-            Formula::Disjunction(f, f2) => Pf::Disjunction(Box::new(f.try_to_propositional()?), Box::new(f2.try_to_propositional()?)),
-            Formula::Not(f) => Pf::Not(Box::new(f.try_to_propositional()?)),
-            Formula::Implication(f, f2) => Pf::Implication(Box::new(f.try_to_propositional()?), Box::new(f2.try_to_propositional()?)),
-            Formula::Equivalance(f, f2) => Pf::Equivalance(Box::new(f.try_to_propositional()?), Box::new(f2.try_to_propositional()?)),
+            Formula::Conjunction(f, f2) => Pf::and(f.try_to_propositional()?, f2.try_to_propositional()?),
+            Formula::Disjunction(f, f2) => Pf::or(f.try_to_propositional()?, f2.try_to_propositional()?),
+            Formula::Not(f) => Pf::not(f.try_to_propositional()?),
+            Formula::Implication(f, f2) => Pf::implies(f.try_to_propositional()?, f2.try_to_propositional()?),
+            Formula::Equivalance(f, f2) => Pf::iff(f.try_to_propositional()?, f2.try_to_propositional()?),
             Formula::ForAll(_, _) |
             Formula::ThereExists(_, _) => return None,
         })

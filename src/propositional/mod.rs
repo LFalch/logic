@@ -27,6 +27,10 @@ impl Formula {
         }
     }
     #[inline]
+    pub fn not(self) -> Self {
+        Self::Not(Box::new(self))
+    }
+    #[inline]
     pub fn and(self, b: Self) -> Self {
         Self::Conjunction(Box::new(self), Box::new(b))
     }
@@ -114,7 +118,7 @@ impl Formula {
 impl Not for Formula {
     type Output = Self;
     fn not(self) -> Self::Output {
-        Self::Not(Box::new(self))
+        Self::not(self)
     }
 }
 impl BitAnd for Formula {

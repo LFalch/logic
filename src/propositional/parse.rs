@@ -36,7 +36,7 @@ fn pref(i: &str) -> IResult<&str, Formula> {
 
     alt((
         pair(alt((char('~'), char('!'), char('¬'))), pref)
-            .map(|(_, f)| Formula::Not(Box::new(f))),
+            .map(|(_, f)| Formula::not(f)),
         last,
     ))
     .parse(i)
