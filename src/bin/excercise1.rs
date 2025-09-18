@@ -1,4 +1,4 @@
-use logic::{lk_calc::{self, PrintDirect}, Formula::{self, *}};
+use logic::propositional::{lk_calc::{self, PrintDirect}, Formula::{self, *}};
 
 use self::Atom as a;
 

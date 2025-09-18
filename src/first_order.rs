@@ -1,5 +1,7 @@
 use std::{collections::HashSet, fmt::{self, Display}, hash::Hash};
 
+use crate::propositional;
+
 pub mod lk_calc;
 pub mod parse;
 
@@ -133,8 +135,8 @@ impl Formula {
             Formula::Equivalance(_, _) => 4,
         }
     }
-    pub fn try_to_propositional(&self) -> Option<super::Formula> {
-        use super::Formula as Pf;
+    pub fn try_to_propositional(&self) -> Option<propositional::Formula> {
+        use propositional::Formula as Pf;
         Some(match self {
             Formula::Predicate(c, items) => {
                 return items.is_empty().then_some(Pf::Atom(*c))

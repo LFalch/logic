@@ -6,7 +6,7 @@ use nom::{
 };
 use std::str::FromStr;
 
-use crate::Formula;
+use super::Formula;
 
 impl FromStr for Formula {
     type Err = Box<dyn std::error::Error>;

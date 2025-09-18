@@ -1,4 +1,4 @@
-use crate::Formula;
+use super::Formula;
 use std::fmt::Debug;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -1,4 +1,4 @@
-use logic::{lk_calc::{self, PrintDirect}, Formula::Atom as a};
+use logic::propositional::{lk_calc::{self, PrintDirect}, Formula::Atom as a};
 
 fn main() {
     // (¬p ∨ q) → q ∧ (q → r) ∧ ¬r  === (q ∧ ¬r) ∧ (¬r → ¬q) ∨ (p ∧ ¬q)
