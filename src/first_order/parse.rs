@@ -5,7 +5,7 @@ use nom::{
 };
 use std::{collections::HashSet, str::FromStr};
 
-use crate::first_order::{Formula, Term};
+use crate::{emit_once, first_order::{Formula, Term}};
 
 impl FromStr for Formula {
     type Err = Box<dyn std::error::Error>;
@@ -124,7 +124,7 @@ fn vee(i: &str) -> IResult<&str, Formula> {
     fold(
         0..,
         pair(alt((tag("||"), tag("|"), tag("∨"))), pref),
-        move || init.clone(),
+        emit_once(init),
         |acc, (_, val)| Formula::or(acc, val),
     )
     .parse(i)
@@ -136,7 +136,7 @@ fn wedge(i: &str) -> IResult<&str, Formula> {
     fold(
         0..,
         pair(alt((tag("&&"), tag("&"), tag("/\\"), tag("∧"))), vee),
-        move || init.clone(),
+        emit_once(init),
         |acc, (_, val)| Formula::and(acc, val),
     )
     .parse(i)
@@ -148,7 +148,7 @@ fn implication(i: &str) -> IResult<&str, Formula> {
     fold(
         0..,
         pair(alt((tag("->"), tag("=>"), tag("→"))), wedge),
-        move || init.clone(),
+        emit_once(init),
         |acc, (_, val)| Formula::implies(acc, val),
     )
     .parse(i)
@@ -160,8 +160,7 @@ fn biimplication(i: &str) -> IResult<&str, Formula> {
     fold(
         0..,
         pair(alt((tag("<->"), tag("<=>"), tag("↔"))), implication),
-        // wtf??
-        move || init.clone(),
+        emit_once(init),
         |acc, (_, val)| Formula::iff(acc, val),
     )
     .parse(i)
