@@ -1,6 +1,7 @@
 use std::{collections::HashSet, fmt::{self, Display}, hash::Hash};
 
 pub mod lk_calc;
+pub mod parse;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Term {
@@ -10,6 +11,16 @@ pub enum Term {
 }
 
 impl Term {
+    pub fn func<const N: usize>(f: char, ts: [Term; N]) -> Self {
+        Self::Function(f, Box::new(ts))
+    }
+    pub fn make_const(&mut self) {
+        match *self {
+            Term::Variable(c) => *self = Term::Constant(c),
+            Term::Constant(_) => (),
+            Term::Function(_, _) => unreachable!("only variables should be made const"),
+        }
+    }
     pub fn get_symbols(&self) -> impl IntoIterator<Item=char> {
         match self {
             Term::Variable(v) => vec![*v],
@@ -20,6 +31,12 @@ impl Term {
                 .collect(),
         }
     }
+}
+
+fn union<T: Eq + Hash>(a: HashSet<T>, b: HashSet<T>) -> HashSet<T> {
+    let mut c = a;
+    c.extend(b);
+    c
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -37,13 +54,31 @@ pub enum Formula {
     Equivalance(Box<Formula>, Box<Formula>),
 }
 
-fn union<T: Eq + Hash>(a: HashSet<T>, b: HashSet<T>) -> HashSet<T> {
-    let mut c = a;
-    c.extend(b);
-    c
-}
-
 impl Formula {
+    pub fn predicate<const N: usize>(p: char, ts: [Term; N]) -> Formula {
+        Formula::Predicate(p, Box::new(ts))
+    }
+    pub fn forall(x: char, f: Formula) -> Formula {
+        Formula::ForAll(x, Box::new(f))
+    }
+    pub fn exists(x: char, f: Formula) -> Formula {
+        Formula::ThereExists(x, Box::new(f))
+    }
+    pub fn and(a: Formula, b: Formula) -> Self {
+        Self::Conjunction(Box::new(a), Box::new(b))
+    }
+    pub fn or(a: Formula, b: Formula) -> Self {
+        Self::Disjunction(Box::new(a), Box::new(b))
+    }
+    pub fn not(f: Formula) -> Formula {
+        Formula::Not(Box::new(f))
+    }
+    pub fn implies(f: Formula, f1: Formula) -> Formula {
+        Formula::Implication(Box::new(f), Box::new(f1))
+    }
+    pub fn iff(f: Formula, f1: Formula) -> Formula {
+        Formula::Implication(Box::new(f), Box::new(f1))
+    }
     pub fn get_all_symbols(&self) -> impl IntoIterator<Item=char> {
         match self {
             Formula::Predicate(_, terms) => terms
@@ -98,9 +133,6 @@ impl Formula {
             Formula::Equivalance(_, _) => 4,
         }
     }
-}
-
-impl Formula {
     pub fn try_to_propositional(&self) -> Option<super::Formula> {
         use super::Formula as Pf;
         Some(match self {

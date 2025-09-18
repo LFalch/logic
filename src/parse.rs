@@ -4,6 +4,9 @@ use nom::{
         complete::{char, space0},
     }, error::{Error, ErrorKind::NonEmpty}, multi::fold, sequence::{delimited, pair}, IResult, Parser
 };
+use std::str::FromStr;
+
+use crate::Formula;
 
 impl FromStr for Formula {
     type Err = Box<dyn std::error::Error>;
@@ -15,10 +18,6 @@ impl FromStr for Formula {
         }
     }
 }
-
-use std::str::FromStr;
-
-use crate::Formula;
 
 fn parens(i: &str) -> IResult<&str, Formula> {
     delimited(space0, delimited(tag("("), biimplication, tag(")")), space0).parse(i)
