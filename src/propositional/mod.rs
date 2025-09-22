@@ -4,6 +4,7 @@ use crate::symtab::Interpretation;
 
 pub mod parse;
 pub mod lk_calc;
+pub mod norm;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Formula {

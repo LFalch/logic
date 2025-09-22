@@ -71,7 +71,7 @@ fn implication(i: &str) -> IResult<&str, Formula> {
 
     fold(
         0..,
-        pair(alt((tag("->"), tag("=>"), tag("→"))), wedge),
+        pair(alt((tag("->"), tag("=>"), tag("→"), tag("⇒"))), wedge),
         emit_once(init),
         |acc, (_, val)| Formula::implies(acc, val),
     )
@@ -83,7 +83,7 @@ fn biimplication(i: &str) -> IResult<&str, Formula> {
 
     fold(
         0..,
-        pair(alt((tag("<->"), tag("<=>"), tag("↔"))), implication),
+        pair(alt((tag("<->"), tag("<=>"), tag("↔"), tag("⇔"))), implication),
         emit_once(init),
         |acc, (_, val)| Formula::iff(acc, val),
     )
