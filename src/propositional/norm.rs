@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::{collections::{BTreeMap, BTreeSet}, mem};
 
 use super::Formula;
 
@@ -81,7 +81,7 @@ fn nnf_inner(formula: Formula, positive: bool) -> NnFormula {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClausalForm {
-    pub conjunction: BTreeSet<BTreeSet<(char, bool)>>,
+    pub conjunction: BTreeSet<BTreeMap<char, bool>>,
 }
 impl ClausalForm {
     pub fn new(
@@ -96,8 +96,8 @@ impl ClausalForm {
     }
     pub fn one(p: char, t: bool) -> Self {
         let mut conjunction = BTreeSet::new();
-        let mut disjunction = BTreeSet::new();
-        disjunction.insert((p, t));
+        let mut disjunction = BTreeMap::new();
+        disjunction.insert(p, t);
         conjunction.insert(disjunction);
         Self { conjunction }
     }
@@ -112,21 +112,7 @@ impl ClausalForm {
         }
     }
     pub fn is_valid(&self) -> bool {
-        self.conjunction
-            .iter().all(|disjunction| {
-                let mut last_false = None;
-                for &(p, t) in disjunction {
-                    if let Some(false_p) = last_false {
-                        if p == false_p {
-                            return true;
-                        }
-                    }
-                    if !t {
-                        last_false = Some(p);
-                    }
-                }
-                false
-            })
+        self.conjunction.is_empty()
     }
     pub fn is_satisfiable(&self) -> bool {
         let mut true_set = BTreeSet::new();
@@ -135,14 +121,63 @@ impl ClausalForm {
         eprintln!("{:?}", self.conjunction);
         satis_helper(&mut true_set, &mut false_set, self.conjunction.iter())
     }
+    /// This attempts to reduce itself as much as possible while preserving its truthness for every interpretation
+    // TODO: test this function!!!
+    pub fn simplify(&mut self) {
+        let mut set_predicates = BTreeMap::new();
+        loop {
+            let mut singleton = None;
+            for disjunction in &self.conjunction {
+                if disjunction.len() == 1 {
+                    singleton = Some(disjunction);
+                    break;
+                }
+            }
+            let Some(singleton) = singleton else {
+                break;
+            };
+            let mut singleton = singleton.clone();
+            self.conjunction.remove(&singleton);
+            let (c, t) = singleton.pop_first().unwrap();
+            drop(singleton);
+            if let Some(old) = set_predicates.insert(c, t) {
+                if t != old {
+                    // make a conjunction with an empty disjunction yielding false for all interpretations
+                    return self.conjunction = [[].into_iter().collect()].into_iter().collect();
+                }
+            }
+        }
+
+        // if we didn't set any predicates, it's already simplified and we end
+        if set_predicates.is_empty() {
+            return;
+        }
+
+        let conj = mem::replace(&mut self.conjunction, BTreeSet::new());
+        self.conjunction = conj
+            .into_iter()
+            .filter_map(|mut disjunction| {
+                let mut congruent = false;
+                for (&key, &val) in set_predicates.iter() {
+                    if let Some(old) = disjunction.remove(&key) && old == val {
+                        congruent = true;
+                    }
+                }
+                // remove it iff it is congruent and empty thus keep it iff it is incongruent or not empty
+                (!(disjunction.is_empty() && congruent)).then_some(disjunction)
+            })
+            .collect();
+        // loop back to see if we can learn more
+        self.simplify();
+    }
 }
-fn satis_helper<'a>(true_set: &mut BTreeSet<char>, false_set: &mut BTreeSet<char>, mut conjunction_rest: impl Iterator<Item=&'a BTreeSet<(char, bool)>> + Clone) -> bool {
+fn satis_helper<'a>(true_set: &mut BTreeSet<char>, false_set: &mut BTreeSet<char>, mut conjunction_rest: impl Iterator<Item=&'a BTreeMap<char, bool>> + Clone) -> bool {
     eprintln!("true: {true_set:?}, false: {false_set:?}");
 
     if let Some(assignments) = conjunction_rest.next() {
         eprintln!("  need to assign: {assignments:?}");
         let mut satisfiable = false;
-        for &(p, b) in assignments {
+        for (&p, &b) in assignments {
             if b {
                 if !false_set.contains(&p) {
                     // do not try to assign a predicate to true if it's already assigned false
@@ -199,8 +234,18 @@ pub fn cnf(formula: NnFormula) -> ClausalForm {
             let mut conjunction = BTreeSet::new();
 
             for a in smaller {
-                for b in larger.iter() {
-                    conjunction.insert(a.iter().copied().chain(b.iter().copied()).collect());
+                'middle: for b in larger.iter() {
+                    let mut disjunction = BTreeMap::new();
+                    for (&k, &v) in a.iter().chain(b.iter()) {
+                        if let Some(old) = disjunction.insert(k, v) {
+                            if v != old {
+                                // if we just overwrote a value with its opposite then this disjunction set
+                                // is a tautology and thus we can skip it
+                                continue 'middle;
+                            }
+                        }
+                    }
+                    conjunction.insert(disjunction);
                     // a or b1 and a or b2 and a or b3
                 }
             }
