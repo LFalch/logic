@@ -47,7 +47,7 @@ fn wedge(i: &str) -> IResult<&str, Formula> {
     
     fold(
         0..,
-        pair(alt((tag("&&"), tag("&"), tag("/\\"), tag("∧"))), vee),
+        pair(alt((tag("&&"), tag("&"), tag("/\\"), tag("∧"))), pref),
         emit_once(init),
         |acc, (_, val)| Formula::and(acc, val),
     )
@@ -59,7 +59,7 @@ fn vee(i: &str) -> IResult<&str, Formula> {
 
     fold(
         0..,
-        pair(alt((tag("||"), tag("|"), tag("∨"))), pref),
+        pair(alt((tag("||"), tag("|"), tag("∨"))), wedge),
         emit_once(init),
         |acc, (_, val)| Formula::or(acc, val),
     )
@@ -71,7 +71,7 @@ fn implication(i: &str) -> IResult<&str, Formula> {
 
     fold(
         0..,
-        pair(alt((tag("->"), tag("=>"), tag("→"), tag("⇒"))), wedge),
+        pair(alt((tag("->"), tag("=>"), tag("→"), tag("⇒"))), vee),
         emit_once(init),
         |acc, (_, val)| Formula::implies(acc, val),
     )
