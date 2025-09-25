@@ -82,13 +82,18 @@ fn nnf_inner(formula: &Formula, positive: bool) -> NnFormula {
 fn is_subset(sub: &BTreeMap<char, bool>, sup: &BTreeMap<char, bool>) -> bool {
     let mut sup_iter = sup.iter();
     for sub in sub {
-        let Some(sup) = sup_iter.next() else {
-            return false;
-        };
-        if sub != sup {
-            return false;
+        loop {
+            // Iterate through sup until we find the same predicate
+            // If we don't find it, we return false "early"
+            let Some(sup) = sup_iter.next() else {
+                return false;
+            };
+            if sub == sup {
+                break;
+            }
         }
     }
+    // If we kept finding the same element, then it is a subset (although not necessarily a strict subset)
     true
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -193,32 +198,6 @@ impl ClausalForm {
         }
         any_dead
     }
-    #[must_use]
-    /// Returns if it removed anything
-    fn remove_contradictory_regions(&mut self) -> bool {
-        let mut alter = Vec::new();
-        for d1 in &self.conjunction {
-            if d1.is_empty() {
-                continue;
-            }
-            let contradiction = d1.iter().map(|(&c, &b)| (c, !b)).collect();
-            for d2 in &self.conjunction {
-                if is_subset(&contradiction, d2) {
-                    alter.push((contradiction.clone(), d2.clone()));
-                }
-            } 
-        }
-        let any_killed = !alter.is_empty();
-        for (contradiction, mut superset) in alter {
-            if self.conjunction.remove(&superset) {
-                for (k, _) in contradiction {
-                    superset.remove(&k);
-                }
-                self.conjunction.insert(superset);
-            }
-        }
-        any_killed
-    }
     /// This attempts to reduce itself as much as possible while preserving its truthness for every interpretation
     pub fn simplify(&mut self) {
         if let Some(first) = self.conjunction.first() {
@@ -232,15 +211,8 @@ impl ClausalForm {
         // TODO: check for pairs of disjunctions who are different only by one predicate true in one and false in the other
         // and remove that predicate merging the two (p ∨ Γ) ∧ (¬p ∨ Γ) <=> Γ
 
-        let mut run = true;
-        while run {
-            run = false;
-            while self.remove_contradictory_regions() {
-                run = true;
-            }
-            while self.remove_supersets() {
-                run = true;
-            }
+        if self.remove_supersets() {
+            self.simplify();
         }
     }
 }
