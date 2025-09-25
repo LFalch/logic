@@ -1,6 +1,6 @@
 use std::{collections::BTreeMap, env::args, error::Error, io::stdin};
 
-use logic::{first_order, propositional::{self, norm::{cnf, nnf, tableaux::{NegatedTableauxResult::{Falsifiable, Valid}, TableauxResult::{Satisfiable, Unsatisfiable}}}}};
+use logic::{first_order, propositional::{self, norm::{cnf, nnf}}};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let prop_mode = args().skip(1).any(|s| s == "-p" || s == "--propositional");
@@ -75,13 +75,13 @@ fn tableaux_loop() -> Result<(), Box<dyn Error>> {
         drop(f);
         println!("nnf : {nnf}");
         match nnf.is_satisfiable() {
-            Unsatisfiable => println!("unsatisfiable"),
-            Satisfiable(model) => {
+            None => println!("unsatisfiable"),
+            Some(model) => {
                 print!("satisfiable\nmodel: ");
                 print_interpretation(&model);
-                match nnf.is_valid() {
-                    Valid => println!("valid"),
-                    Falsifiable(counter_model) => {
+                match nnf.is_falsifiable() {
+                    None => println!("valid"),
+                    Some(counter_model) => {
                         print!("falsifiable\ncounter-model: ");
                         print_interpretation(&counter_model);
                     }

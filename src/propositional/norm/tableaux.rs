@@ -2,37 +2,21 @@ use std::{collections::{BTreeMap, VecDeque}, fmt::Display, ops::Deref};
 
 use crate::propositional::norm::NnFormula;
 
-#[derive(Debug)]
-pub enum TableauxResult {
-    /// The formula is unsatisfiable
-    Unsatisfiable,
-    /// The formula is satisfiable and the attached map is a satisfying model
-    Satisfiable(BTreeMap<char, bool>),
-}
-pub enum NegatedTableauxResult {
-    /// The formula is valid (all interpretations satisfy the formula)
-    Valid,
-    /// The formula is falsifiable and the attached map is a counter-model
-    Falsifiable(BTreeMap<char, bool>),
-}
-
 impl NnFormula {
-    /// Uses the semantic tableaux to determine if the formula is satisfiable
-    pub fn is_satisfiable(&self) -> TableauxResult {
+    /// Uses the semantic tableaux to determine if the formula is satisfiable.
+    /// Returns a satisfying interpretation if one exists, and `None` if it is unsatisfiable.
+    pub fn is_satisfiable(&self) -> Option<BTreeMap<char, bool>> {
         let mut branch = Branch::NEW;
         if tableaux(&mut branch, [self]) {
-            TableauxResult::Unsatisfiable
+            None
         } else {
-            TableauxResult::Satisfiable(branch.into_model())
+            Some(branch.into_model())
         }
     }
-    /// Runs `is_satifisable` on ~self
+    /// Runs `is_satifisable` on ~self, returns `None` if valid, or a counter-model if falsifiable.
     #[inline]
-    pub fn is_valid(&self) -> NegatedTableauxResult {
-        match self.not().is_satisfiable() {
-            TableauxResult::Unsatisfiable => NegatedTableauxResult::Valid,
-            TableauxResult::Satisfiable(cm) => NegatedTableauxResult::Falsifiable(cm),
-        }
+    pub fn is_falsifiable(&self) -> Option<BTreeMap<char, bool>> {
+        self.not().is_satisfiable()
     }
 
     /// Returns `true` if `self` is the negation of `other` (or equivalently vice versa)
