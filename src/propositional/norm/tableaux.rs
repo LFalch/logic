@@ -7,19 +7,26 @@ impl NnFormula {
     /// Returns a satisfying interpretation if one exists, and `None` if it is unsatisfiable.
     pub fn is_satisfiable(&self) -> Option<BTreeMap<char, bool>> {
         let mut branch = Branch::NEW;
-        if tableaux(&mut branch, [self]) {
+        if tableaux(&mut branch, [self], true) {
             None
         } else {
             Some(branch.into_model())
         }
     }
-    /// Runs `is_satifisable` on ~self, returns `None` if valid, or a counter-model if falsifiable.
+    /// Uses a rhs-version of the semantic tableaux to determine if the formula is falsifiable.
+    /// Returns a counter-model if one exists, otherwise `None` if the formula is valid.
     #[inline]
     pub fn is_falsifiable(&self) -> Option<BTreeMap<char, bool>> {
-        self.not().is_satisfiable()
+        let mut branch = Branch::NEW;
+        if tableaux(&mut branch, [self], false) {
+            None
+        } else {
+            Some(branch.into_model())
+        }
     }
 
-    /// Returns `true` if `self` is the negation of `other` (or equivalently vice versa)
+    /// Returns `true` if `self` is the negation of `other` (or equivalently vice versa).
+    /// Might return `false` even if it is the negation if their structure is different, use `equiv` for better accuracy.
     pub fn contradicts(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Atom(p1, c1), Self::Atom(p2, c2)) => p1 == p2 && c1 != c2,
@@ -72,34 +79,36 @@ impl<'a> Branch<'a> {
     }
 }
 #[inline]
-fn tableaux<'a>(branch: &mut Branch<'a>, new_facts: impl IntoIterator<Item=&'a NnFormula>) -> bool {
+fn tableaux<'a>(branch: &mut Branch<'a>, new_facts: impl IntoIterator<Item=&'a NnFormula>, negated: bool) -> bool {
     for new_fact in new_facts {
         if branch.contradicts(new_fact) {
             return true;
         }
         branch.insert(new_fact);
     }
-    apply_rule(branch)
+    apply_rule(branch, negated)
 }
-fn apply_rule(branch: &mut Branch) -> bool {
+fn apply_rule(branch: &mut Branch, negated: bool) -> bool {
     let Some(unused_fact) = branch.unused_fact() else {
         // no new rules!! this means it _is_ satisfiable and we can end now
         return false;
     };
-    match unused_fact {
+    match (unused_fact, negated) {
         // set the predicate and loop back to apply a new rule if the new predicate was uncontradictory
         // if it is contradictory however, this branch will close here
         // notice that this is a logical implication!
-        &NnFormula::Atom(p, t) => !branch.set_predicate(p, t) || apply_rule(branch),
+        (&NnFormula::Atom(p, t), n) => !branch.set_predicate(p, t == n) || apply_rule(branch, negated),
         // add two new facts and check if they close the branch, (if they don't this function will be called again to try and apply a new rule)
-        NnFormula::Conjunction(f, f1) => tableaux(branch, [f.deref(), f1.deref()]),
+        (NnFormula::Disjunction(f, f1), false) |
+        (NnFormula::Conjunction(f, f1), true ) => tableaux(branch, [f.deref(), f1.deref()], negated),
         // adds one the first fact to the branch and sees if that branch is closeable and if it is we do the same with the second
         // iff both sub-branches are closed, we 
-        NnFormula::Disjunction(f, f1) => {
+        (NnFormula::Conjunction(f, f1), false) |
+        (NnFormula::Disjunction(f, f1), true ) => {
             // store the original branch in its own binding, so that if the first branch doesn't close, ITS branch bubbles up
             let orig_branch = branch.clone();
-            tableaux(branch, [f.deref()]) &&
-            tableaux({*branch = orig_branch; branch}, [f1.deref()])
+            tableaux(branch, [f.deref()], negated) &&
+            tableaux({*branch = orig_branch; branch}, [f1.deref()], negated)
         }
     }
 }
