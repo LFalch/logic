@@ -1,4 +1,4 @@
-use std::{collections::{BTreeMap, BTreeSet}, mem};
+use std::{collections::{BTreeMap, BTreeSet}, fmt::{self, Display}, ops::Bound};
 
 use super::Formula;
 
@@ -26,58 +26,70 @@ impl NnFormula {
 }
 
 #[inline]
-pub fn nnf(formula: Formula) -> NnFormula {
+pub fn nnf(formula: &Formula) -> NnFormula {
     nnf_inner(formula, true)
 }
-fn nnf_inner(formula: Formula, positive: bool) -> NnFormula {
+fn nnf_inner(formula: &Formula, positive: bool) -> NnFormula {
     match (formula, positive) {
-        (Formula::Atom(c), p) => NnFormula::Atom(c, p),
-        (Formula::Not(f), p) => nnf_inner(*f, !p),
+        (&Formula::Atom(c), p) => NnFormula::Atom(c, p),
+        (Formula::Not(f), p) => nnf_inner(f, !p),
         (Formula::Conjunction(f, f1), true) => NnFormula::Conjunction(
-            Box::new(nnf_inner(*f, true)),
-            Box::new(nnf_inner(*f1, true)),
+            Box::new(nnf_inner(f, true)),
+            Box::new(nnf_inner(f1, true)),
         ),
         (Formula::Disjunction(f, f1), true) => NnFormula::Disjunction(
-            Box::new(nnf_inner(*f, true)),
-            Box::new(nnf_inner(*f1, true)),
+            Box::new(nnf_inner(f, true)),
+            Box::new(nnf_inner(f1, true)),
         ),
         (Formula::Conjunction(f, f1), false) => NnFormula::Disjunction(
-            Box::new(nnf_inner(*f, false)),
-            Box::new(nnf_inner(*f1, false)),
+            Box::new(nnf_inner(f, false)),
+            Box::new(nnf_inner(f1, false)),
         ),
         (Formula::Disjunction(f, f1), false) => NnFormula::Conjunction(
-            Box::new(nnf_inner(*f, false)),
-            Box::new(nnf_inner(*f1, false)),
+            Box::new(nnf_inner(f, false)),
+            Box::new(nnf_inner(f1, false)),
         ),
         (Formula::Implication(f, f1), true) => NnFormula::Disjunction(
-            Box::new(nnf_inner(*f, false)),
-            Box::new(nnf_inner(*f1, true)),
+            Box::new(nnf_inner(f, false)),
+            Box::new(nnf_inner(f1, true)),
         ),
         (Formula::Implication(f, f1), false) => NnFormula::Conjunction(
-            Box::new(nnf_inner(*f, true)),
-            Box::new(nnf_inner(*f1, false)),
+            Box::new(nnf_inner(f, true)),
+            Box::new(nnf_inner(f1, false)),
         ),
         (Formula::Equivalance(f, f1), true) => NnFormula::Conjunction(
             Box::new(NnFormula::Disjunction(
-                Box::new(nnf_inner((*f).clone(), false)),
-                Box::new(nnf_inner((*f1).clone(), true)),
+                Box::new(nnf_inner(f, false)),
+                Box::new(nnf_inner(f1, true)),
             )),
             Box::new(NnFormula::Disjunction(
-                Box::new(nnf_inner(*f, true)),
-                Box::new(nnf_inner(*f1, false)),
+                Box::new(nnf_inner(f, true)),
+                Box::new(nnf_inner(f1, false)),
             )),
         ),
         (Formula::Equivalance(f, f1), false) => NnFormula::Disjunction(
             Box::new(NnFormula::Conjunction(
-                Box::new(nnf_inner((*f).clone(), false)),
-                Box::new(nnf_inner((*f1).clone(), true)),
+                Box::new(nnf_inner(f, false)),
+                Box::new(nnf_inner(f1, true)),
             )),
             Box::new(NnFormula::Conjunction(
-                Box::new(nnf_inner(*f, true)),
-                Box::new(nnf_inner(*f1, false)),
+                Box::new(nnf_inner(f, true)),
+                Box::new(nnf_inner(f1, false)),
             )),
         ),
     }
+}
+fn is_subset(sub: &BTreeMap<char, bool>, sup: &BTreeMap<char, bool>) -> bool {
+    let mut sup_iter = sup.iter();
+    for sub in sub {
+        let Some(sup) = sup_iter.next() else {
+            return false;
+        };
+        if sub != sup {
+            return false;
+        }
+    }
+    true
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClausalForm {
@@ -94,6 +106,11 @@ impl ClausalForm {
                 .collect(),
         }
     }
+    pub const fn tautology() -> Self {
+        Self {
+            conjunction: BTreeSet::new(),
+        }
+    }
     pub fn one(p: char, t: bool) -> Self {
         let mut conjunction = BTreeSet::new();
         let mut disjunction = BTreeMap::new();
@@ -101,7 +118,7 @@ impl ClausalForm {
         conjunction.insert(disjunction);
         Self { conjunction }
     }
-    pub fn union(self, other: Self) -> Self {
+    pub fn and(self, other: Self) -> Self {
         let (mut a, mut b) = (self, other);
         if a.conjunction.len() > b.conjunction.len() {
             a.conjunction.append(&mut b.conjunction);
@@ -111,71 +128,124 @@ impl ClausalForm {
             b
         }
     }
+    pub fn or(self, other: Self) -> Self {
+        let mut a = self.conjunction;
+        let mut b = other.conjunction;
+        if a.len() <= 1 && b.len() <= 1 {
+            let a = a.pop_first().unwrap_or_default();
+            let b = b.pop_first().unwrap_or_default();
+            let mut union = BTreeMap::new();
+            for (k, v) in a.into_iter().chain(b) {
+                if let Some (v2) = union.insert(k, v) && v != v2 {
+                    return ClausalForm::tautology();
+                }
+            }
+            let mut conjunction = BTreeSet::new();
+            conjunction.insert(union);
+            return ClausalForm { conjunction };
+        }
+
+        let (smaller, larger) = if a.len() <= b.len() { (a, b) } else { (b, a) };
+
+        let mut conjunction = BTreeSet::new();
+
+        // each disjunction in each of the two conjunctions gets merged with each other, creating up to N*M new disjunctions
+        for disj in larger {
+            'disj: for other in smaller.iter() {
+                let mut disj = disj.clone();
+                for (&k, &v) in other.iter() {
+                    if let Some(old) = disj.insert(k, v) {
+                        if v != old {
+                            // if we just overwrote a value with its opposite then this disjunction set
+                            // is a tautology and thus we can skip it
+                            continue 'disj;
+                        }
+                    }
+                }
+                conjunction.insert(disj);
+            }
+        }
+
+        ClausalForm { conjunction }
+    }
     pub fn is_valid(&self) -> bool {
         self.conjunction.is_empty()
     }
     pub fn is_satisfiable(&self) -> bool {
         let mut true_set = BTreeSet::new();
         let mut false_set = BTreeSet::new();
-        eprintln!();
-        eprintln!("{:?}", self.conjunction);
         satis_helper(&mut true_set, &mut false_set, self.conjunction.iter())
     }
-    /// This attempts to reduce itself as much as possible while preserving its truthness for every interpretation
-    // TODO: test this function!!!
-    pub fn simplify(&mut self) {
-        let mut set_predicates = BTreeMap::new();
-        loop {
-            let mut singleton = None;
-            for disjunction in &self.conjunction {
-                if disjunction.len() == 1 {
-                    singleton = Some(disjunction);
-                    break;
+    fn remove_supersets(&mut self) -> bool {
+        let mut dead = Vec::new();
+        for d1 in &self.conjunction {
+            for d2 in self.conjunction.range((Bound::Excluded(d1), Bound::Unbounded)) {
+                if is_subset(d1, d2) {
+                    dead.push(d2.clone());
+                } else if is_subset(d2, d1) {
+                    dead.push(d1.clone());
                 }
+            } 
+        }
+        let any_dead = !dead.is_empty();
+        for dead in dead {
+            self.conjunction.remove(&dead);
+        }
+        any_dead
+    }
+    #[must_use]
+    /// Returns if it removed anything
+    fn remove_contradictory_regions(&mut self) -> bool {
+        let mut alter = Vec::new();
+        for d1 in &self.conjunction {
+            if d1.is_empty() {
+                continue;
             }
-            let Some(singleton) = singleton else {
-                break;
-            };
-            let mut singleton = singleton.clone();
-            self.conjunction.remove(&singleton);
-            let (c, t) = singleton.pop_first().unwrap();
-            drop(singleton);
-            if let Some(old) = set_predicates.insert(c, t) {
-                if t != old {
-                    // make a conjunction with an empty disjunction yielding false for all interpretations
-                    return self.conjunction = [[].into_iter().collect()].into_iter().collect();
+            let contradiction = d1.iter().map(|(&c, &b)| (c, !b)).collect();
+            for d2 in &self.conjunction {
+                if is_subset(&contradiction, d2) {
+                    alter.push((contradiction.clone(), d2.clone()));
                 }
+            } 
+        }
+        let any_killed = !alter.is_empty();
+        for (contradiction, mut superset) in alter {
+            if self.conjunction.remove(&superset) {
+                for (k, _) in contradiction {
+                    superset.remove(&k);
+                }
+                self.conjunction.insert(superset);
             }
         }
-
-        // if we didn't set any predicates, it's already simplified and we end
-        if set_predicates.is_empty() {
+        any_killed
+    }
+    /// This attempts to reduce itself as much as possible while preserving its truthness for every interpretation
+    pub fn simplify(&mut self) {
+        if let Some(first) = self.conjunction.first() {
+            if first.is_empty() {
+                self.conjunction = [first.clone()].into_iter().collect();
+            }
+        } else {
             return;
         }
 
-        let conj = mem::replace(&mut self.conjunction, BTreeSet::new());
-        self.conjunction = conj
-            .into_iter()
-            .filter_map(|mut disjunction| {
-                let mut congruent = false;
-                for (&key, &val) in set_predicates.iter() {
-                    if let Some(old) = disjunction.remove(&key) && old == val {
-                        congruent = true;
-                    }
-                }
-                // remove it iff it is congruent and empty thus keep it iff it is incongruent or not empty
-                (!(disjunction.is_empty() && congruent)).then_some(disjunction)
-            })
-            .collect();
-        // loop back to see if we can learn more
-        self.simplify();
+        // TODO: check for pairs of disjunctions who are different only by one predicate true in one and false in the other
+        // and remove that predicate merging the two (p ∨ Γ) ∧ (¬p ∨ Γ) <=> Γ
+
+        let mut run = true;
+        while run {
+            run = false;
+            while self.remove_contradictory_regions() {
+                run = true;
+            }
+            while self.remove_supersets() {
+                run = true;
+            }
+        }
     }
 }
 fn satis_helper<'a>(true_set: &mut BTreeSet<char>, false_set: &mut BTreeSet<char>, mut conjunction_rest: impl Iterator<Item=&'a BTreeMap<char, bool>> + Clone) -> bool {
-    eprintln!("true: {true_set:?}, false: {false_set:?}");
-
     if let Some(assignments) = conjunction_rest.next() {
-        eprintln!("  need to assign: {assignments:?}");
         let mut satisfiable = false;
         for (&p, &b) in assignments {
             if b {
@@ -204,58 +274,17 @@ fn satis_helper<'a>(true_set: &mut BTreeSet<char>, false_set: &mut BTreeSet<char
             }
         }
         if !satisfiable {
-            eprintln!("aww :(");
             return false;
         }
     }
-    eprintln!("yay!");
     true
 }
 
 pub fn cnf(formula: NnFormula) -> ClausalForm {
     match formula {
         NnFormula::Atom(p, t) => ClausalForm::one(p, t),
-        NnFormula::Conjunction(a, b) => cnf(*a).union(cnf(*b)),
-        NnFormula::Disjunction(a, b) => {
-            let mut a = cnf(*a).conjunction;
-            let mut b = cnf(*b).conjunction;
-            assert!(!(a.is_empty() || b.is_empty()));
-            if a.len() + b.len() == 2 {
-                let mut a = a.pop_first().unwrap();
-                let mut b = b.pop_first().unwrap();
-                a.append(&mut b);
-                let mut conjunction = BTreeSet::new();
-                conjunction.insert(a);
-                return ClausalForm { conjunction };
-            }
-
-            let (smaller, larger) = if a.len() > b.len() { (a, b) } else { (b, a) };
-
-            let mut conjunction = BTreeSet::new();
-
-            for a in smaller {
-                'middle: for b in larger.iter() {
-                    let mut disjunction = BTreeMap::new();
-                    for (&k, &v) in a.iter().chain(b.iter()) {
-                        if let Some(old) = disjunction.insert(k, v) {
-                            if v != old {
-                                // if we just overwrote a value with its opposite then this disjunction set
-                                // is a tautology and thus we can skip it
-                                continue 'middle;
-                            }
-                        }
-                    }
-                    conjunction.insert(disjunction);
-                    // a or b1 and a or b2 and a or b3
-                }
-            }
-
-            // A or ((B and C) and D) ->
-            // A or (B and C) and A or D ->
-            // A or B and A or C and A or D
-
-            ClausalForm { conjunction }
-        }
+        NnFormula::Conjunction(a, b) => cnf(*a).and(cnf(*b)),
+        NnFormula::Disjunction(a, b) => cnf(*a).or(cnf(*b)),
     }
 }
 
@@ -275,96 +304,174 @@ mod tests {
     #[test]
     fn nnf_basic() {
         assert_eq!(
-            nnf(P.or(Q.not()).and(P.not().or(Q))),
+            nnf(&P.or(Q.not()).and(P.not().or(Q))),
             NP.or(NQ.not()).and(NP.not().or(NQ))
         );
         // (p → ¬q) ∨ ¬(r ∧ q)
         // ¬p ∨ ¬q ∨ ¬r ∨ ¬q
         assert_eq!(
-            nnf((P.implies(!Q)).or(!(R.and(Q)))),
+            nnf(&(P.implies(!Q)).or(!(R.and(Q)))),
             NP.not().or(NQ.not()).or(NR.not().or(NQ.not())),
         );
         // ¬(¬p → ¬q) ∧ r
         // ¬p ∧ q ∧ r
         assert_eq!(
-            nnf((P.not().implies(!Q)).not().and(R)),
+            nnf(&(P.not().implies(!Q)).not().and(R)),
             NP.not().and(NQ).and(NR),
         );
         // ¬(¬p → q ∧ ¬r)
         // (¬p ∧ ¬q) ∨ r
         assert_eq!(
-            nnf(!((P.not().implies(Q)).and(!R))),
+            nnf(&!((P.not().implies(Q)).and(!R))),
             NP.not().and(NQ.not()).or(NR),
         );
-        assert_ne!(nnf(S), NS.not());
+        assert_ne!(nnf(&S), NS.not());
     }
     #[test]
     fn cnf_basic() {
         assert_eq!(
-            cnf(nnf(P.or(Q.not()).and(P.not().or(Q)))),
+            cnf(nnf(&P.or(Q.not()).and(P.not().or(Q)))),
             ClausalForm::new([[('p', false), ('q', true)], [('p', true), ('q', false)]]),
         );
         // (p → ¬q) ∨ ¬(r ∧ q)
         // ¬p ∨ ¬q ∨ ¬r ∨ ¬q
         assert_eq!(
-            cnf(nnf((P.implies(!Q)).or(!(R.and(Q))))),
+            cnf(nnf(&(P.implies(!Q)).or(!(R.and(Q))))),
             ClausalForm::new([[('p', false), ('q', false), ('r', false)]],)
         );
         // ¬(¬p → ¬q) ∧ r
         // ¬p ∧ q ∧ r
         assert_eq!(
-            cnf(nnf((P.not().implies(!Q)).not().and(R))),
+            cnf(nnf(&(P.not().implies(!Q)).not().and(R))),
             ClausalForm::new([[('q', true)], [('p', false)], [('r', true)]],)
         );
         // ¬(¬p → q ∧ ¬r)
         // (¬p ∧ ¬q) ∨ r
         // (¬p ∨ r) ∧ ¬q ∨ r
         assert_eq!(
-            cnf(nnf(!((P.not().implies(Q)).and(!R)))),
+            cnf(nnf(&!((P.not().implies(Q)).and(!R)))),
             ClausalForm::new([[('q', false), ('r', true)], [('p', false), ('r', true)],])
         );
-        assert_ne!(nnf(S), NS.not());
+        assert_ne!(nnf(&S), NS.not());
     }
     #[test]
     fn valid() {
-        let f = cnf(nnf(P.or(Q.not()).and(P.not().or(Q))));
+        let f = cnf(nnf(&P.or(Q.not()).and(P.not().or(Q))));
         assert!(!f.is_valid());
         assert!(f.is_satisfiable());
         // (p → ¬q) ∨ ¬(r ∧ q)
         // ¬p ∨ ¬q ∨ ¬r ∨ ¬q
-        let f = cnf(nnf((P.implies(!Q)).or(!(R.and(Q)))));
+        let f = cnf(nnf(&(P.implies(!Q)).or(!(R.and(Q)))));
         assert!(!f.is_valid());
         assert!(f.is_satisfiable());
         // ¬(¬p → ¬q) ∧ r
         // ¬p ∧ q ∧ r
-        let f = cnf(nnf((P.not().implies(!Q)).not().and(R)));
+        let f = cnf(nnf(&(P.not().implies(!Q)).not().and(R)));
         assert!(!f.is_valid());
         assert!(f.is_satisfiable());
         // ¬(¬p → q ∧ ¬r)
         // (¬p ∧ ¬q) ∨ r
         // (¬p ∨ r) ∧ ¬q ∨ r
-        let f = cnf(nnf(!((P.not().implies(Q)).and(!R))));
+        let f = cnf(nnf(&!((P.not().implies(Q)).and(!R))));
         assert!(!f.is_valid());
         assert!(f.is_satisfiable());
-        let f = cnf(nnf(P.implies(Q).implies(Q.not().implies(!P))));
+        let f = cnf(nnf(&P.implies(Q).implies(Q.not().implies(!P))));
         assert!(f.is_valid(), "{f:?}");
         assert!(f.is_satisfiable());
-        let f = cnf(nnf(P.or(!P).implies(P.and(!P))));
+        let f = cnf(nnf(&P.or(!P).implies(P.and(!P))));
         assert!(!f.is_valid());
         assert!(!f.is_satisfiable());
 
-        let f = cnf(nnf( !(P | Q) >> (!P & !Q) ));
+        let f = cnf(nnf(&( !(P | Q) >> (!P & !Q) )));
         assert!(f.is_valid());
         assert!(f.is_satisfiable());
-        let f = cnf(nnf( ((P >> Q) >> R) >> ((P & Q) >> R) ));
+        let f = cnf(nnf(&( ((P >> Q) >> R) >> ((P & Q) >> R) )));
         assert!(f.is_valid());
         assert!(f.is_satisfiable());
-        let f = cnf(nnf( (P >> (Q >> R)) >> ((P | Q) >> R) ));
+        let f = cnf(nnf(&( (P >> (Q >> R)) >> ((P | Q) >> R) )));
         assert!(!f.is_valid());
         println!("sat? {}", ((P >> (Q >> R)) >> ((P | Q) >> R)).satisfiable());
         assert!(f.is_satisfiable());
-        let f = cnf(nnf( !(!(P | Q) >> (!P & Q)) ));
+        let f = cnf(nnf( &!(!(P | Q) >> (!P & Q)) ));
         assert!(!f.is_valid());
         assert!(f.is_satisfiable());
+    }
+    #[test]
+    fn simple() {
+        let f = !((!(P | Q)) >> (!P & Q));
+        let mut cnf = cnf(nnf(&f));
+        cnf.simplify();
+        assert_eq!(cnf, ClausalForm::new([
+            [('p', false)],
+            [('q', false)],
+        ]));
+
+        let mut cnf = ClausalForm::new([
+            vec![('p', false)],
+            vec![('p', false), ('q', true), ('r', false)],
+            vec![('p', false), ('q', true), ('r', false), ('s', false)],
+        ]);
+        cnf.simplify();
+        let expected_simple = ClausalForm::new([
+            vec![('p', false)],
+        ]);
+        assert_eq!(cnf, expected_simple, "{cnf} != {expected_simple}");
+    }
+}
+
+impl Display for ClausalForm {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{{")?;
+        let mut comma = false;
+        for disjunction in &self.conjunction {
+            if comma {
+                write!(f, ", ")?;
+            }
+            write!(f, "{{")?;
+            comma = true;
+            let mut comma = false;
+            for (&c, &p) in disjunction {
+                if comma {
+                    write!(f, ", ")?;
+                }
+                comma = true;
+                if !p {
+                    write!(f, "¬")?;
+                }
+                write!(f, "{c}")?;
+            }
+            write!(f, "}}")?;
+        }
+        write!(f, "}}")
+    }
+}
+impl Display for NnFormula {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let upper_precedence = f.precision().unwrap_or(0);
+        let prec = match self {
+            Self::Atom(_, _) => 3,
+            Self::Conjunction(_, _) => 2,
+            Self::Disjunction(_, _) => 1,
+        };
+
+        let parentheses = upper_precedence > prec;
+        if parentheses {
+            write!(f, "(")?;
+        }
+
+        match self {
+            &Self::Atom(c, p) => {
+                if !p {
+                    write!(f, "¬")?;
+                }
+                write!(f, "{c}")
+            }
+            Self::Disjunction(f1, f2) => write!(f, "{f1:.prec$} ∨ {f2:.prec$}"),
+            Self::Conjunction(f1, f2) => write!(f, "{f1:.prec$} ∧ {f2:.prec$}"),
+        }?;
+        if parentheses {
+            write!(f, ")")?;
+        }
+        Ok(())
     }
 }

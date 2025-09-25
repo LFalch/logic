@@ -1,6 +1,6 @@
 use std::{env::args, error::Error, io::stdin};
 
-use logic::{first_order, propositional};
+use logic::{first_order, propositional::{self, norm::{cnf, nnf}}};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let prop_mode = args().skip(1).any(|s| s == "-p" || s == "--propositional");
@@ -20,7 +20,14 @@ fn propositional_loop() -> Result<(), Box<dyn Error>> {
                 return;
             }
         };
-        println!("{f}");
+        println!(" f: {f}");
+        let nnf = nnf(&f);
+        println!("nn: {nnf}");
+        let mut cnf = cnf(nnf);
+        println!("cn: {}", cnf);
+        cnf.simplify();
+        println!("cn: {}", cnf);
+        drop(cnf);
         propositional::lk_calc::tree(&mut propositional::lk_calc::PrintDirect::default(), &f);
     })
 }
