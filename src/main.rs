@@ -1,6 +1,6 @@
-use std::{env::args, error::Error, io::stdin};
+use std::{collections::BTreeMap, env::args, error::Error, io::stdin};
 
-use logic::{first_order, propositional::{self, norm::{cnf, nnf}}};
+use logic::{first_order, propositional::{self, norm::{cnf, nnf, tableaux::{NegatedTableauxResult::{Falsifiable, Valid}, TableauxResult::{Satisfiable, Unsatisfiable}}}}};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let prop_mode = args().skip(1).any(|s| s == "-p" || s == "--propositional");
@@ -74,7 +74,32 @@ fn tableaux_loop() -> Result<(), Box<dyn Error>> {
         println!("f   : {f}");
         drop(f);
         println!("nnf : {nnf}");
-        let satisfiable = !nnf.prove_tableaux();
-        println!("sat?: {satisfiable}");
+        match nnf.is_satisfiable() {
+            Unsatisfiable => println!("unsatisfiable"),
+            Satisfiable(model) => {
+                print!("satisfiable\nmodel: ");
+                print_interpretation(&model);
+                match nnf.is_valid() {
+                    Valid => println!("valid"),
+                    Falsifiable(counter_model) => {
+                        print!("falsifiable\ncounter-model: ");
+                        print_interpretation(&counter_model);
+                    }
+                }
+            }
+        }
     })
+}
+
+fn print_interpretation(map: &BTreeMap<char, bool>) {
+    let mut comma = false;
+    for (&k, &v) in map.iter() {
+        if comma {
+            print!(", ");
+        } else {
+            comma = true;
+        }
+        print!("𝓘 ({k}) = {v}");
+    }
+    println!();
 }
