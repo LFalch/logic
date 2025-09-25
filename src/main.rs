@@ -4,7 +4,10 @@ use logic::{first_order, propositional::{self, norm::{cnf, nnf}}};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let prop_mode = args().skip(1).any(|s| s == "-p" || s == "--propositional");
-    if prop_mode {
+    let disprove_mode = args().skip(1).any(|s| s == "-t" || s == "--tableaux");
+    if disprove_mode {
+        tableaux_loop()
+    } else if prop_mode {
         propositional_loop()
     } else {
         first_order_loop()
@@ -57,4 +60,21 @@ fn line_loop(mut f: impl FnMut(&str)) -> Result<(), Box<dyn Error>> {
         f(&s)
     }
     Ok(())
+}
+fn tableaux_loop() -> Result<(), Box<dyn Error>> {
+    line_loop(|s| {
+        let f: propositional::Formula = match s.parse() {
+            Ok(f) => f,
+            Err(e) => {
+                eprintln!("{e}");
+                return;
+            }
+        };
+        let nnf = nnf(&f);
+        println!("f   : {f}");
+        drop(f);
+        println!("nnf : {nnf}");
+        let satisfiable = !nnf.prove_tableaux();
+        println!("sat?: {satisfiable}");
+    })
 }

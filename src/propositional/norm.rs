@@ -2,7 +2,9 @@ use std::{collections::{BTreeMap, BTreeSet}, fmt::{self, Display}, ops::Bound};
 
 use super::Formula;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+pub mod tableaux;
+
+#[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd)]
 // Negative normal form of formula
 pub enum NnFormula {
     Atom(char, bool),
@@ -16,9 +18,9 @@ impl NnFormula {
     pub fn or(self, o: Self) -> Self {
         Self::Disjunction(Box::new(self), Box::new(o))
     }
-    pub fn not(self) -> Self {
+    pub fn not(&self) -> Self {
         match self {
-            NnFormula::Atom(c, p) => NnFormula::Atom(c, !p),
+            &NnFormula::Atom(c, p) => NnFormula::Atom(c, !p),
             NnFormula::Conjunction(f, f1) => f.not().or(f1.not()),
             NnFormula::Disjunction(f, f1) => f.not().and(f1.not()),
         }
