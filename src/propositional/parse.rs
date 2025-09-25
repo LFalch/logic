@@ -42,8 +42,20 @@ fn pref(i: &str) -> IResult<&str, Formula> {
     .parse(i)
 }
 
-fn vee(i: &str) -> IResult<&str, Formula> {
+fn wedge(i: &str) -> IResult<&str, Formula> {
     let (i, init) = pref(i)?;
+    
+    fold(
+        0..,
+        pair(alt((tag("&&"), tag("&"), tag("/\\"), tag("∧"))), vee),
+        emit_once(init),
+        |acc, (_, val)| Formula::and(acc, val),
+    )
+    .parse(i)
+}
+
+fn vee(i: &str) -> IResult<&str, Formula> {
+    let (i, init) = wedge(i)?;
 
     fold(
         0..,
@@ -54,20 +66,8 @@ fn vee(i: &str) -> IResult<&str, Formula> {
     .parse(i)
 }
 
-fn wedge(i: &str) -> IResult<&str, Formula> {
-    let (i, init) = vee(i)?;
-
-    fold(
-        0..,
-        pair(alt((tag("&&"), tag("&"), tag("/\\"), tag("∧"))), vee),
-        emit_once(init),
-        |acc, (_, val)| Formula::and(acc, val),
-    )
-    .parse(i)
-}
-
 fn implication(i: &str) -> IResult<&str, Formula> {
-    let (i, init) = wedge(i)?;
+    let (i, init) = vee(i)?;
 
     fold(
         0..,

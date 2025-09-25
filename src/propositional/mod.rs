@@ -1,4 +1,4 @@
-use std::{collections::{HashMap, HashSet}, fmt::{self, Display}, ops::{BitAnd, BitOr, Not, Shl, Shr}};
+use std::{cmp::Ordering, collections::{HashMap, HashSet}, fmt::{self, Alignment, Display}, ops::{BitAnd, BitOr, Not, Shl, Shr}};
 
 use crate::symtab::Interpretation;
 
@@ -139,8 +139,13 @@ impl Display for Formula {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let upper_precedence = f.precision().unwrap_or(0);
         let prec = self.precedence() as usize;
+        let assoc = f.align();
 
-        let parentheses = upper_precedence >= prec;
+        let parentheses = match (upper_precedence.cmp(&prec), assoc) {
+            (Ordering::Equal, Some(Alignment::Right) | None) |
+            (Ordering::Greater, _) => true,
+            _ => false,
+        };
         if parentheses {
             write!(f, "(")?;
         }
@@ -148,8 +153,8 @@ impl Display for Formula {
         match self {
             Formula::Atom(c) => write!(f, "{c}"),
             Formula::Not(f1) => write!(f, "¬{f1:.prec$}"),
-            Formula::Disjunction(f1, f2) => write!(f, "{f1:.prec$} ∨ {f2:.prec$}"),
-            Formula::Conjunction(f1, f2) => write!(f, "{f1:.prec$} ∧ {f2:.prec$}"),
+            Formula::Disjunction(f1, f2) => write!(f, "{f1:<.prec$} ∨ {f2:>.prec$}"),
+            Formula::Conjunction(f1, f2) => write!(f, "{f1:<.prec$} ∧ {f2:>.prec$}"),
             Formula::Implication(f1, f2) => write!(f, "{f1:.prec$} → {f2:.prec$}"),
             Formula::Equivalance(f1, f2) => write!(f, "{f1:.prec$} ↔ {f2:.prec$}"),
         }?;
